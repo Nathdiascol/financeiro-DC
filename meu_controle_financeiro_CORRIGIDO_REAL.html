@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Meu Controle</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#000;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
+body{min-height:100vh}.app{max-width:520px;margin:auto;min-height:100vh;padding:22px 16px 92px}
+header{display:flex;justify-content:space-between;align-items:center;margin:8px 2px 20px}
+h1{font-size:28px;margin:0}.sub{color:#8e8e93;font-size:14px;margin-top:4px}
+button,input,textarea,select{font:inherit}button{border:0;color:#fff;background:#1c1c1e;border-radius:14px;padding:12px 15px;cursor:pointer}
+.icon{width:42px;height:42px;border-radius:50%;padding:0;font-size:20px}.primary{background:#ffd60a;color:#111;font-weight:700}.danger{background:#351214;color:#ff453a}.ghost{background:#1c1c1e}
+.card{background:#111113;border:1px solid #242426;border-radius:18px;padding:16px;margin-bottom:12px}
+.big{font-size:29px;font-weight:700;margin:6px 0 14px}.muted{color:#929296}.green{color:#30d158}.yellow{color:#ffd60a}.red{color:#ff453a}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#19191b;border-radius:13px;padding:11px 8px}.stat b{display:block;margin-top:5px}
+.tabs{display:flex;background:#151517;border-radius:14px;padding:4px;margin-bottom:14px}.tabs button{flex:1;background:transparent;color:#999;padding:9px 4px}.tabs button.active{background:#29292c;color:#fff}
+.nav{position:fixed;z-index:10;bottom:0;left:50%;transform:translateX(-50%);width:min(520px,100%);background:rgba(12,12,13,.96);border-top:1px solid #27272a;padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,1fr)}
+.nav button{background:transparent;padding:7px 2px;color:#8e8e93;font-size:11px}.nav button.active{color:#ffd60a}.nav span{display:block;font-size:19px;margin-bottom:2px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.item{background:#171719;border-radius:14px;padding:13px;margin:8px 0}.item small{color:#8e8e93}.badge{border-radius:10px;padding:5px 8px;font-size:11px;font-weight:700;white-space:nowrap}.paid{background:#12351f;color:#30d158}.pending{background:#3b330e;color:#ffd60a}.late{background:#42171a;color:#ff453a}
+.progress{height:7px;background:#29292b;border-radius:10px;overflow:hidden}.progress i{display:block;height:100%;background:#ffd60a;border-radius:10px}
+label{display:block;font-size:13px;color:#aaa;margin:12px 0 6px}input,textarea,select{width:100%;background:#19191b;border:1px solid #2b2b2e;color:#fff;border-radius:13px;padding:13px;outline:none}textarea{min-height:150px;resize:vertical}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.actions{display:flex;gap:8px;margin-top:14px}.actions>*{flex:1}
+.hidden{display:none!important}.title{font-size:19px;font-weight:700;margin:20px 0 10px}.empty{text-align:center;color:#777;padding:25px 10px}
+.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.keypad button{height:58px;font-size:20px;border-radius:18px}.keypad .op{background:#ffd60a;color:#111}.display{font-size:35px;text-align:right;min-height:76px;padding:15px 8px}
+.note{white-space:pre-wrap}.check{width:25px;height:25px;accent-color:#30d158}
+@media(min-width:700px){body{background:#0a0a0b}.app{background:#000;box-shadow:0 0 50px #000}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div><h1 id="greeting">Olá!</h1><div class="sub" id="monthLabel"></div></div><button class="icon" onclick="goHome()">⌂</button></header>
+
+<main id="content"></main>
+</div>
+<nav class="nav">
+<button data-page="home" onclick="goHome()"><span>⌂</span>Início</button>
+<button data-page="income" onclick="showPage('income')"><span>＋</span>Entradas</button>
+<button data-page="bills" onclick="showPage('bills')"><span>▣</span>Contas</button>
+<button data-page="installments" onclick="showPage('installments')"><span>◫</span>Parcelas</button>
+<button data-page="more" onclick="showPage('more')"><span>☰</span>Mais</button>
+</nav>
+
+<script>
+const KEY='meuControleFinanceiroV1';
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{income:[],bills:[],installments:[],notes:[]};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(db));
+const money=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const today=new Date(); const iso=d=>new Date(d).toISOString().slice(0,10);
+const fmt=d=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR');
+const monthKey=()=>today.toISOString().slice(0,7);
+const monthName=today.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+document.getElementById('monthLabel').textContent=monthName.charAt(0).toUpperCase()+monthName.slice(1);
+
+function statusBill(x){
+  if(x.paid)return ['Paga','paid'];
+  return x.due<iso(today)?['Atrasada','late']:['Pendente','pending'];
+}
+function monthIncome(){return db.income.filter(x=>x.date.slice(0,7)===monthKey())}
+function monthBills(){return db.bills.filter(x=>x.active!==false).map(x=>({...x,month:monthKey()})).filter(x=>true)}
+function totals(){
+  const inc=monthIncome(), received=inc.filter(x=>x.received).reduce((s,x)=>s+ +x.value,0), future=inc.filter(x=>!x.received).reduce((s,x)=>s+ +x.value,0);
+  const bills=db.bills.filter(x=>x.active!==false).reduce((s,x)=>s+ +x.value,0);
+  const inst=db.installments.filter(x=>!x.paid && x.due.slice(0,7)===monthKey()).reduce((s,x)=>s+ +x.value,0);
+  return {received,future,out:bills+inst,available:received-bills-inst,projected:received+future-bills-inst};
+}
+function shell(title,body,back=false){return `<div class="row"><div class="title" style="margin-top:0">${back?'‹ ':''}${title}</div><button class="ghost" onclick="openForm('${title}')">＋</button></div>${body}`}
+
+function home(){
+ const t=totals();
+ const pending=t.out, late=db.bills.filter(x=>!x.paid&&x.due<iso(today)).length+db.installments.filter(x=>!x.paid&&x.due<iso(today)).length;
+ return `<div class="card"><div class="muted">Saldo disponível</div><div class="big">${money(t.available)}</div>
+ <div class="grid3"><div class="stat"><span class="green">↑ Entradas</span><b>${money(t.received)}</b></div><div class="stat"><span class="red">↓ Saídas</span><b>${money(t.out)}</b></div><div class="stat"><span class="yellow">◎ Previsto</span><b>${money(t.projected)}</b></div></div></div>
+ <div class="card"><div class="row"><b>Entradas do mês</b><span class="muted">${monthName}</span></div><div class="row" style="margin-top:14px"><div><div class="green">${money(t.received)}</div><small>recebido</small></div><div><div class="yellow">${money(t.future)}</div><small>a receber</small></div></div></div>
+ <div class="card"><div class="row"><b>Contas pendentes</b><b class="red">${money(pending)}</b></div><div style="margin-top:10px" class="progress"><i style="width:${Math.min(100,pending?70:0)}%"></i></div>${late?`<p class="red" style="margin-bottom:0">⚠ ${late} conta(s) atrasada(s)</p>`:''}</div>
+ <div class="title">Próximos pagamentos</div>${upcoming(4)}`;
+}
+function upcoming(n){
+ let a=[...db.bills.filter(x=>!x.paid),...db.installments.filter(x=>!x.paid)].sort((a,b)=>a.due.localeCompare(b.due)).slice(0,n);
+ return a.length?a.map(x=>{let s=statusBill(x);return `<div class="item"><div class="row"><div><b>${x.name}</b><br><small>${fmt(x.due)} · ${money(x.value)}</small></div><span class="badge ${s[1]}">${s[0]}</span></div></div>`}).join(''):'<div class="empty">Nenhuma conta pendente 🎉</div>';
+}
+function income(filter='all'){
+ let all=[...db.income].sort((a,b)=>a.date.localeCompare(b.date));
+ if(filter==='received') all=all.filter(x=>x.received);
+ if(filter==='future') all=all.filter(x=>!x.received);
+ return `<div class="tabs">
+   <button class="${filter==='all'?'active':''}" onclick="showIncomeTab('all')">Todas</button>
+   <button class="${filter==='received'?'active':''}" onclick="showIncomeTab('received')">Recebidas</button>
+   <button class="${filter==='future'?'active':''}" onclick="showIncomeTab('future')">A receber</button>
+ </div>
+ <button class="primary" style="width:100%" onclick="openForm('entrada')">＋ Adicionar entrada</button><div class="title">Entradas</div>
+ ${all.length?all.map(x=>`<div class="item"><div class="row"><div><b>${esc(x.name)}</b><br><small>${fmt(x.date)}</small></div><div style="text-align:right"><b>${money(x.value)}</b><br><span class="badge ${x.received?'paid':'pending'}">${x.received?'Recebido':'A receber'}</span></div></div>${!x.received?`<button style="margin-top:9px" onclick="receive('${x.id}')">Marcar como recebido</button>`:''}</div>`).join(''):'<div class="empty">Nenhuma entrada cadastrada.</div>'}`;
+}
+function showIncomeTab(filter){ document.getElementById('content').innerHTML=income(filter); document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='income')); }
+
+function bills(){
+ return `<div class="card"><b>Contas fixas</b><p class="muted">Cadastre uma vez. Elas se repetem automaticamente todos os meses.</p></div>
+ <button class="primary" style="width:100%" onclick="openForm('fixa')">＋ Nova conta fixa</button><div class="title">Minhas contas</div>
+ ${db.bills.length?db.bills.map(x=>{let s=statusBill(x);return `<div class="item"><div class="row"><div><b>${x.name}</b><br><small>${money(x.value)} · vence dia ${x.day}</small></div><span class="badge ${s[1]}">${s[0]}</span></div><div class="actions">${!x.paid?`<button onclick="payBill('${x.id}')">☑ Marcar como paga</button>`:''}<button class="danger" onclick="del('bills','${x.id}')">Excluir</button></div></div>`}).join(''):'<div class="empty">Nenhuma conta fixa.</div>'}`;
+}
+function calendar(){return `<div class="title">Calendário</div><div class="card"><div class="row"><button onclick="changeMonth(-1)">‹</button><b>${monthName}</b><button onclick="changeMonth(1)">›</button></div><p class="muted">Abaixo estão os próximos eventos financeiros.</p></div>${upcoming(20)}${monthIncome().map(x=>`<div class="item"><div class="row"><div><b>${x.name}</b><br><small>${fmt(x.date)}</small></div><span class="badge ${x.received?'paid':'pending'}">${x.received?'Recebido':'A receber'}</span></div></div>`).join('')}`}
+
+function notes(){return `<div class="row"><div class="title">Notas</div><button class="primary" onclick="addNote()">＋</button></div><div id="notesList">${db.notes.length?db.notes.map((n,i)=>`<div class="card"><div class="row"><b>${n.title||'Sem título'}</b><button class="danger" onclick="delNote(${i})">×</button></div><p class="note">${esc(n.text)}</p></div>`).join(''):'<div class="empty">Escreva suas anotações aqui.</div>'}</div>`}
+function calculator(){return `<div class="title">Calculadora</div><div class="card"><div id="calc" class="display">0</div><div class="keypad">${['C','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','0',',','=',''].map((k,i)=>k?`<button class="${i%4===3||k==='='?'op':''}" onclick="calcKey('${k}')">${k}</button>`:'').join('')}</div></div><div class="card"><b>Calculadora financeira</b><div class="row" style="margin-top:12px"><span>Entradas do mês</span><b>${money(totals().received+totals().future)}</b></div><div class="row"><span>Contas + parcelas</span><b>${money(totals().out)}</b></div><div class="row" style="margin-top:8px"><span class="green">Sobra prevista</span><b class="green">${money(totals().projected)}</b></div></div>`}
+function form(type){
+ let title=type==='entrada'?'Nova entrada':type==='fixa'?'Nova conta fixa':'Nova parcela';
+ return `<div class="row"><div class="title">‹ ${title}</div><button onclick="showPage(type==='entrada'?'income':type==='fixa'?'bills':'installments')">Cancelar</button></div><div class="card">
+ <label>Descrição</label><input id="fName" placeholder="Ex.: Salário, aluguel, cartão...">
+ <label>Valor</label><input id="fValue" type="number" step="0.01" placeholder="0,00">
+ ${type==='entrada'?`<label>Data</label><input id="fDate" type="date" value="${iso(today)}"><label>Status</label><select id="fStatus"><option value="received">Já recebi</option><option value="future">Ainda vou receber</option></select>`:''}
+ ${type==='fixa'?`<label>Dia de vencimento</label><input id="fDay" type="number" min="1" max="31" placeholder="10">`:''}
+ ${type==='parcela'?`<div class="formgrid"><div><label>1ª data de vencimento</label><input id="fDate" type="date" value="${iso(today)}"></div><div><label>Total de parcelas</label><input id="fTotal" type="number" min="1" value="2"></div></div>`:''}
+ <div class="actions"><button class="primary" onclick="saveForm('${type}')">Salvar</button></div></div>`;
+}
+function openForm(t){if(['entrada','fixa','parcela'].includes(t)){document.getElementById('content').innerHTML=form(t);return}}
+function saveForm(type){
+ const name=document.getElementById('fName').value.trim(), value=+document.getElementById('fValue').value;
+ if(!name||!value)return alert('Preencha descrição e valor.');
+ if(type==='entrada'){db.income.push({id:Date.now().toString(),name,value,date:document.getElementById('fDate').value,received:document.getElementById('fStatus').value==='received'});save();showPage('income')}
+ if(type==='fixa'){let day=Math.max(1,Math.min(31,+document.getElementById('fDay').value));db.bills.push({id:Date.now().toString(),name,value,day,paid:false,active:true});save();showPage('bills')}
+ if(type==='parcela'){let date=document.getElementById('fDate').value,total=+document.getElementById('fTotal').value;const groupId=Date.now().toString()+Math.random().toString(36).slice(2,8);for(let i=1;i<=total;i++){let d=new Date(date+'T12:00:00');d.setMonth(d.getMonth()+i-1);db.installments.push({id:Date.now().toString()+i+Math.random().toString(36).slice(2,5),groupId,name,value,n:i,total,due:iso(d),paid:false})}save();showPage('installments')}
+}
+function receive(id){let x=db.income.find(x=>x.id===id);if(x){x.received=true;save();showPage('income')}}
+function payBill(id){let x=db.bills.find(x=>x.id===id);if(x){x.paid=true;save();showPage('bills')}}
+function payInst(id){let x=db.installments.find(x=>x.id===id);if(x){x.paid=true;save();showPage('installments')}}
+function del(type,id){db[type]=db[type].filter(x=>x.id!==id);save();showPage(type==='bills'?'bills':'installments')}
+function addNote(){let title=prompt('Título da nota:');if(title===null)return;let text=prompt('Escreva sua nota:');if(text===null)return;db.notes.unshift({title,text});save();showPage('notes')}
+function delNote(i){db.notes.splice(i,1);save();showPage('notes')}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+let calc='';function calcKey(k){let el=document.getElementById('calc');if(!el)return;if(k==='C'){calc=''}else if(k==='⌫'){calc=calc.slice(0,-1)}else if(k==='='){try{calc=String(Function('return '+calc.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-'))())}catch{calc='Erro'}}else{calc+=k==='%'?'/100':k}el.textContent=calc||'0'}
+function exportData(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));a.download='meu-controle-backup.json';a.click()}
+function clearData(){if(confirm('Apagar todos os dados deste navegador?')){localStorage.removeItem(KEY);location.reload()}}
+function goHome(){
+ const c=document.getElementById('content');
+ if(!c)return;
+ c.innerHTML=home();
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='home'));
+}
+function showPage(page){
+ const c=document.getElementById('content');
+ if(!c)return;
+ let out;
+ try{
+   out=page==='home'?home():page==='income'?income():page==='bills'?bills():page==='installments'?installments():page==='more'?more():page==='calendar'?calendar():page==='notes'?notes():page==='calculator'?calculator():home();
+ }catch(e){
+   console.error(e);
+   if(page==='home'){ c.innerHTML='<div class="empty">Não foi possível carregar a tela inicial.</div>'; }
+   else { c.innerHTML='<div class="empty">Não foi possível carregar esta tela.</div>'; }
+   return;
+ }
+ c.innerHTML=out;
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page||(page==='calendar'||page==='notes'||page==='calculator')&&b.dataset.page==='more'));
+}
+
+function saveSecurityName(){let n=document.getElementById('secName').value.trim();if(!n)return alert('Digite um nome.');db.name=n;save();document.getElementById('greeting').textContent='Olá, '+n+'!';securityScreen()}
+function changeSecurityPin(){let p=prompt('Digite o novo PIN de 4 números:');if(!/^\d{4}$/.test(p||''))return alert('O PIN precisa ter exatamente 4 números.');db.pin=p;save();alert('PIN alterado!')}
+function groupedInstallments(){
+ const groups={};
+ db.installments.forEach(x=>{
+   const k=x.groupId||('legacy:'+x.name);
+   if(!groups[k]) groups[k]={key:k,name:x.name,total:x.total||1,value:x.value,items:[]};
+   groups[k].items.push(x);
+ });
+ return Object.values(groups).map(g=>{
+   g.items.sort((a,b)=>(a.n||0)-(b.n||0));
+   g.total=Math.max(g.total||1,g.items.length);
+   return g;
+ });
+}
+function installments(){
+ const gs=groupedInstallments();
+ return `<div class="row"><div class="title" style="margin-top:0">Parcelas</div><button class="primary" onclick="openForm('parcela')">＋</button></div>
+ <div class="card"><b>Compras agrupadas</b><p class="muted">Cada compra aparece em uma pasta. Toque para abrir todas as parcelas daquela compra.</p></div>
+ ${gs.length?gs.map(g=>{
+   const open=window._openFolders&&window._openFolders[g.key], paid=g.items.filter(x=>x.paid).length;
+   return `<div class="item">
+     <div class="row" onclick="toggleGroup('${esc(g.key)}')" style="cursor:pointer">
+       <div><b>📁 ${esc(g.name)}</b><br><small>${money(g.value)} · ${g.total} parcelas · ${paid}/${g.total} pagas</small></div>
+       <b style="font-size:22px">${open?'⌃':'⌄'}</b>
+     </div>
+     ${open?`<div style="margin-top:10px">${g.items.map(x=>{
+       const st=x.paid?['Paga','paid']:x.due<iso(today)?['Atrasada','late']:['Pendente','pending'];
+       return `<div class="item" style="margin:7px 0;background:#101012">
+         <div class="row">
+           <div><b>${x.n||1}/${x.total||g.total} parcela</b><br><small>${fmt(x.due)} · ${money(x.value)}</small></div>
+           <span class="badge ${st[1]}">${st[0]}</span>
+         </div>
+         <div class="actions">
+           ${!x.paid?`<button onclick="event.stopPropagation();payInst('${x.id}')">☑ Marcar como paga</button>`:''}
+           <button onclick="event.stopPropagation();editInst('${x.id}')">✎ Editar</button>
+           <button class="danger" onclick="event.stopPropagation();delInst('${x.id}')">Excluir</button>
+         </div>
+       </div>`;
+     }).join('')}</div>`:''}
+   </div>`;
+ }).join(''):'<div class="empty">Nenhuma compra parcelada.</div>'}`;
+}
+function toggleGroup(k){
+ window._openFolders=window._openFolders||{};
+ window._openFolders[k]=!window._openFolders[k];
+ showPage('installments');
+}
+function editInst(id){
+ const x=db.installments.find(v=>v.id===id);
+ if(!x)return;
+ const name=prompt('Descrição da parcela:',x.name);
+ if(name===null)return;
+ const value=prompt('Valor da parcela:',String(x.value).replace('.',','));
+ if(value===null)return;
+ const due=prompt('Vencimento (AAAA-MM-DD):',x.due);
+ if(due===null)return;
+ const clean=String(value).replace(/\./g,'').replace(',','.');
+ const num=Number(clean);
+ if(!name.trim()||!Number.isFinite(num)||num<=0||!/^\d{4}-\d{2}-\d{2}$/.test(due)){
+   alert('Confira descrição, valor e data.');
+   return;
+ }
+ x.name=name.trim();
+ x.value=num;
+ x.due=due;
+ save();
+ showPage('installments');
+}
+function delInst(id){
+ const x=db.installments.find(v=>v.id===id);
+ if(!x)return;
+ if(!confirm(`Excluir a parcela ${x.n||1}/${x.total||1} de "${x.name}"?`))return;
+ db.installments=db.installments.filter(v=>v.id!==id);
+ save();
+ showPage('installments');
+}
+
+function more(){return `<div class="title">Mais</div><div class="item" onclick="showPage('calendar')">📅 <b>Calendário</b><br><small>Entradas, vencimentos e atrasados.</small></div><div class="item" onclick="showPage('notes')">📝 <b>Notas</b><br><small>Seu bloco de anotações.</small></div><div class="item" onclick="showPage('calculator')">🧮 <b>Calculadora</b><br><small>Faça contas e veja a sobra prevista.</small></div><div class="item"><div class="row"><div>🔐 <b>Segurança</b><br><small>Nome e PIN de entrada</small></div><button onclick="securityScreen()">Abrir</button></div></div><div class="item"><b>💾 Backup</b><p class="muted">Seus dados ficam neste navegador.</p><button onclick="exportData()">Exportar backup</button></div>`}
+function openLock(){
+ let overlay=document.getElementById('secureOverlay');
+ if(!overlay){overlay=document.createElement('div');overlay.id='secureOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';document.body.appendChild(overlay)}
+ document.querySelector('.nav').style.display='none';document.querySelector('.app').style.display='none';
+ if(!db.name||!db.pin){overlay.innerHTML=`<div style="width:min(420px,100%);text-align:center"><div style="font-size:52px">🔐</div><h1>Meu Controle</h1><p style="color:#929296">Configure seu acesso</p><div class="card"><label>Como você quer ser chamado?</label><input id="newUserName" placeholder="Ex.: Nathália"><label>Crie um PIN de 4 números</label><input id="newUserPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><button class="primary" style="width:100%;margin-top:14px" onclick="finishSecuritySetup()">Continuar</button></div></div>`}
+ else showPinLogin(overlay)
+}
+function finishSecuritySetup(){const n=document.getElementById('newUserName').value.trim(),p=document.getElementById('newUserPin').value;if(!n||!/^\d{4}$/.test(p))return alert('Digite um nome e um PIN com 4 números.');db.name=n;db.pin=p;save();unlockApp()}
+function showPinLogin(overlay){overlay.innerHTML=`<div style="width:min(420px,100%);text-align:center"><div style="font-size:52px">🔐</div><h1>Olá, ${esc(db.name)}!</h1><p style="color:#929296">Digite seu PIN de 4 números</p><div id="pinDots" style="display:flex;justify-content:center;gap:12px;margin:20px">${[1,2,3,4].map(()=>'<i style="width:13px;height:13px;border:2px solid #777;border-radius:50%"></i>').join('')}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:auto">${[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>`<button style="height:60px;font-size:22px" onclick="pinKey('${k}')">${k}</button>`).join('')}</div></div>`;window._pin=''}
+function pinKey(k){if(k==='⌫')window._pin=(window._pin||'').slice(0,-1);else if(k==='✓'){checkPin();return}else if((window._pin||'').length<4)window._pin=(window._pin||'')+k;document.querySelectorAll('#pinDots i').forEach((d,i)=>{d.style.background=i<(window._pin||'').length?'#ffd60a':'transparent';d.style.borderColor=i<(window._pin||'').length?'#ffd60a':'#777'});if((window._pin||'').length===4)setTimeout(checkPin,100)}
+function checkPin(){if(window._pin===db.pin){window._pin='';unlockApp()}else{window._pin='';alert('PIN incorreto.');openLock()}}
+function unlockApp(){const o=document.getElementById('secureOverlay');if(o)o.remove();document.querySelector('.app').style.display='block';document.querySelector('.nav').style.display='grid';document.getElementById('greeting').textContent='Olá, '+db.name+'!';showPage('home')}
+if(!db.name||!db.pin){db.name='';db.pin='';save()}else document.getElementById('greeting').textContent='Olá, '+db.name+'!';
+openLock();
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+</script>
+</body>
+</html>
